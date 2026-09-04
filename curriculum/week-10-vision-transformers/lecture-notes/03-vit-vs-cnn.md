@@ -1,47 +1,95 @@
-# Lecture 3 — ViT vs. CNN: an honest comparison
+# Lecture 3 — ViT vs. CNN: inductive bias, data-hunger, and the scaling laws
 
-Is the Vision Transformer 'better' than the CNN? The honest answer is *it depends* — on data scale, task, and compute. Cutting through the hype to know *when* each wins is the professional skill this lecture builds.
+Is the Vision Transformer "better" than the CNN? The honest answer is *it depends* — on data
+scale, task, resolution, and compute. Cutting through the hype to know *when* each wins is the professional
+skill this lecture builds, and it rests on a precise idea: **inductive bias**.
 
-## The data-hunger of ViTs
+## Inductive bias, defined
 
-The original ViT's central finding: **ViTs need a lot of data.** With fewer built-in assumptions than CNNs (no locality or translation-equivariance priors), a ViT must *learn* spatial structure from examples. Trained from scratch on ImageNet-1k (1.3M images), ViTs *underperform* comparable CNNs. But pretrained on *much* larger datasets (JFT-300M, or with strong self-supervised pretraining), they *match or exceed* CNNs. The prior a CNN builds in, a ViT learns — if given enough data.
+An inductive bias is the set of assumptions a model makes about the target function before seeing data — the
+prior encoded in its architecture. A CNN hard-wires two:
+
+- **Locality**: a unit's output depends only on a small spatial neighborhood (the kernel).
+- **Translation equivariance**: shifting the input shifts the feature map identically, because weights are
+  shared across positions.
+
+These are *correct* priors for natural images (nearby pixels are related; a cat is a cat wherever it
+appears), so a CNN needs fewer examples to generalize. A ViT hard-wires almost none of this — only the patch
+grid. Self-attention is global and, absent position codes, permutation-invariant. The ViT must therefore
+*learn* locality and equivariance from data if they help. Dosovitskiy et al. (2021) state it plainly: ViTs
+"do not generalize well when trained on insufficient amounts of data" precisely because they "lack some of
+the inductive biases inherent to CNNs."
+
+## The data-hunger result, quantified
+
+The original ViT's central finding: **ViTs need a lot of data.** Trained from scratch on ImageNet-1k (1.3M
+images), ViT-B *underperforms* a comparable ResNet. Pretrained on ImageNet-21k (14M) it becomes competitive;
+pretrained on the in-house JFT-300M (300M images) it *matches or exceeds* strong CNNs and, crucially, keeps
+improving as data and model grow while CNNs plateau. The prior a CNN builds in, a ViT *learns* — if given
+enough data. This is the architectural bias-variance trade made empirical: high bias / low variance (CNN)
+vs. low bias / high variance (ViT), and variance is bought down with data.
+
+## Closing the gap without 300M images: DeiT
+
+You rarely have JFT-300M. Touvron et al.'s **DeiT** ("Training data-efficient image transformers," ICML 2021)
+trained a competitive ViT on ImageNet-1k *alone* using heavy augmentation (RandAugment, Mixup, CutMix),
+strong regularization, and a **distillation token** that learns from a CNN teacher. The distillation token is
+telling: the ViT recovers CNN-like performance partly by *importing the CNN's inductive bias through the
+teacher's soft labels*. Data-efficiency and inductive bias are two views of the same coin.
 
 ## What this means in practice
 
-- **Small/medium data, from scratch:** CNNs usually win — their inductive biases are a gift when data is limited.
-- **Transfer learning (the common case):** a ViT pretrained on huge data, fine-tuned on your task, is competitive-to-superior. Since you'll almost always use pretrained models (Week 5), ViTs are very much in play — just download a pretrained one.
-- **Data-efficient ViTs** (DeiT, with distillation and strong augmentation) narrowed the gap, training well on ImageNet-1k alone.
+- **Small/medium data, from scratch:** CNNs usually win — their biases are a gift when data is scarce.
+- **Transfer learning (the common case):** a ViT pretrained on huge data, fine-tuned on your task, is
+  competitive-to-superior. Since you will almost always use pretrained models (Week 5), ViTs are very much
+  in play — just download one.
+- **High resolution / dense tasks on a budget:** the ViT's `N^2` cost bites; an efficient CNN or a
+  hierarchical Transformer (Swin, Lecture 4) is often better.
 
-## Strengths of each
+## The scaling laws
 
-**ViTs:**
-- Global context from layer one — better at relating distant image parts.
-- Scale beautifully with data and model size (the scaling laws that drove LLMs apply).
-- Unify with multimodal models (CLIP, image+text) and self-supervised pretraining (MAE, DINO) — the frontier.
+Zhai et al. ("Scaling Vision Transformers," 2022) fit the compute/data/parameter scaling of ViTs and found
+smooth power-law improvements — the same regime that drove LLMs. This scalability, not raw single-point
+accuracy, is the ViT's structural advantage: give it more data and compute and it keeps paying off, whereas
+CNN gains saturate. It is also why the frontier (multimodal, self-supervised — Lecture 5) is ViT-shaped.
 
-**CNNs:**
-- Data-efficient — strong with limited data and no giant pretraining.
-- Efficient at high resolution (no N² blowup) — often better for dense tasks on a budget.
-- Mature, well-understood, and excellent for edge deployment (Week 11) — MobileNet-class CNNs still dominate constrained hardware.
+## The convergence: ConvNeXt and the training-recipe confound
 
-## The convergence
+The field is *merging*, not replacing. Liu et al.'s **ConvNeXt** ("A ConvNet for the 2020s," CVPR 2022) took
+a plain ResNet and applied Transformer-era training recipes (AdamW, longer schedules, heavy augmentation,
+LayerNorm, GELU, large kernels, inverted bottlenecks) — and matched ViTs on ImageNet with a *pure CNN*. The
+lesson is sobering: much of the apparent "ViT win" was a **better training recipe**, not the attention
+mechanism. Any honest ViT-vs-CNN comparison must hold the recipe constant, or it measures the recipe, not
+the architecture.
 
-The field is *merging*, not replacing. ConvNeXt showed a pure CNN, modernized with Transformer-era training tricks, matches ViTs — evidence that much of the ViT 'win' was better training recipes, not just architecture. Hybrid models (convolutions + attention) and hierarchical Transformers (Swin) borrow the best of both. The lesson: architecture is one factor among many (data, pretraining, augmentation, compute), and dogma about 'CNN vs. Transformer' is unserious.
+## Strengths, side by side
 
-## Choosing honestly
-
-Ask: How much data do I have? Am I using a pretrained model (yes, usually)? What's my compute/latency budget? For a typical applied project — moderate data, a pretrained backbone, reasonable compute — *try both*, fine-tune, and pick by held-out accuracy and cost. Don't choose by fashion; choose by measurement. That empirical, unhyped stance is what separates an engineer from a trend-follower.
+**ViTs:** global context from layer one; scale beautifully with data/model (scaling laws); the natural
+substrate for self-supervised (MAE, DINO) and multimodal (CLIP, SAM) pretraining — the frontier.
+**CNNs:** data-efficient without giant pretraining; cheap at high resolution (no `N^2`); mature and
+excellent for edge deployment (Week 11) — MobileNet-class CNNs still dominate constrained hardware.
 
 ```mermaid
 flowchart TD
-  A["How much data do you have"] --> B["Small or training from scratch"]
-  A --> C["Large or using a pretrained model"]
-  B --> D["Choose a CNN"]
-  C --> E["Is the compute or latency budget tight"]
-  E --> F["Choose an efficient CNN or hybrid"]
-  E --> G["Budget is flexible"]
-  G --> H["Choose a pretrained ViT and try both"]
+  A["How much data / using a pretrained model?"] --> B["Small data, training from scratch"]
+  A --> C["Large data or pretrained backbone"]
+  B --> D["Choose a CNN (or DeiT-style ViT with heavy aug)"]
+  C --> E["Compute / latency budget tight?"]
+  E --> F["Efficient CNN or hierarchical ViT (Swin)"]
+  E --> G["Budget flexible"]
+  G --> H["Pretrained ViT; try both, pick by held-out accuracy + cost"]
 ```
-*A quick decision path for picking CNN versus ViT on a real project.*
+*A decision path for CNN vs. ViT on a real project.*
 
-**Takeaway:** ViTs are data-hungry (they learn the spatial priors CNNs build in) — from scratch on small data, CNNs win; pretrained on massive data and fine-tuned, ViTs match or beat CNNs. CNNs stay strong for limited data, high resolution, and edge deployment. The field is converging (ConvNeXt, hybrids, Swin), so choose by measuring held-out accuracy and cost for *your* data and budget — not by hype.
+## Choosing honestly
+
+Ask: How much data? Am I using a pretrained model (yes, usually)? What is my compute/latency budget at my
+target resolution? For a typical applied project — moderate data, a pretrained backbone, reasonable compute —
+*try both*, fine-tune under an identical recipe, and pick by held-out accuracy and cost. Don't choose by
+fashion; choose by measurement. That empirical, unhyped stance separates an engineer from a trend-follower.
+
+**Takeaway:** ViTs trade the CNN's hard-wired locality/equivariance for flexibility, so they are data-hungry
+— from scratch on small data CNNs win; pretrained on massive data (or DeiT-distilled) and fine-tuned, ViTs
+match or beat CNNs and keep scaling. CNNs stay strong for limited data, high resolution, and edge. The field
+converges (ConvNeXt shows much of the gap was the training recipe), so hold the recipe constant and choose
+by measured accuracy and cost for *your* data and budget.

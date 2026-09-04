@@ -1,10 +1,20 @@
-# Challenge 1 — Tame an imbalanced dataset
+# Challenge 1 — Tame an imbalanced dataset and defend the remedy
 
-Real data is imbalanced. Build a classifier that handles it honestly.
+Real data is imbalanced and the "best" fix depends on what a mistake costs. Build a classifier that
+handles imbalance honestly and justify your choice quantitatively.
 
-1. Create or find an imbalanced dataset (e.g. one class 10× rarer than the others). Train a naive classifier and show that overall accuracy looks fine while the rare class's recall is poor.
-2. Apply and compare at least two remedies: a class-weighted loss, oversampling with `WeightedRandomSampler`, and/or targeted augmentation of the rare class.
-3. Report per-class recall before and after. Show the trade-off — improving rare-class recall often costs some precision or majority-class recall.
-4. Decide which remedy you'd ship and justify it in terms of the task's real cost of errors.
+**Part 1 — expose the trap.** Create or find an imbalanced dataset (one class ~10× rarer). Train a naive
+classifier and show that overall accuracy looks fine while the rare class's recall is poor. Report per-class
+recall *and* the accuracy confidence interval so the reader knows the noise floor.
 
-**Deliverable:** a before/after per-class metric table and a justified recommendation. The lesson — accuracy hides imbalance, and the right fix depends on what a mistake actually costs — is one you'll use in every real project.
+**Part 2 — compare remedies.** Apply and compare at least three: class-weighted loss, `WeightedRandomSampler`
+over-sampling (with augmentation), focal loss (`γ = 2`), and — for ambition — logit adjustment by `log p(y)`
+(Menon et al., 2021). Report per-class recall before and after, plus balanced accuracy.
+
+**Part 3 — the trade-off and the decision.** Show the cost: improving rare-class recall usually reduces
+head-class recall or precision. State a concrete deployment scenario with an explicit cost per error type, pick
+the remedy you would ship, and defend it in those terms. Re-check calibration after re-balancing.
+
+**Deliverable:** a before/after per-class metric table, a balanced-accuracy comparison, and a justified
+recommendation tied to a stated error-cost model. The lesson — accuracy hides imbalance, and the right fix
+depends on what a mistake actually costs — is one you will use in every real project.

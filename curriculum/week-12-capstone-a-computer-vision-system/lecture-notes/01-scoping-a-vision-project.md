@@ -1,47 +1,89 @@
 # Lecture 1 — Scoping a vision project that finishes
 
-The most common capstone failure isn't a weak model — it's a project scoped so big it never finishes, or so vague it can't be evaluated. Scope deliberately, and the rest follows.
+The most common capstone failure isn't a weak model — it's a project scoped so big it never
+finishes, or so vague it can't be evaluated. Scope is not a nicety; at the graduate level it is a
+resource-allocation problem governed by the **economics of annotation** and the **statistics of
+evaluation**, and both push you toward the smallest task that still supports the decision you care about.
 
-## Pick a task and a dataset you can actually use
+## Frame the decision first, then the task
 
-Choose a problem with (1) images you can obtain and are *allowed* to use (mind licenses, privacy, and consent — the course's ethics rules are binding here), (2) a clear **metric** matched to the task, and (3) a **baseline** to beat. A project without a metric and a baseline can't be judged, including by you.
+A vision project exists to support a *decision or action* — flag a defect, count cells, blur a face, route
+a document. Write that decision down before choosing a task, because the decision fixes the metric, and the
+metric fixes what "good" means. Only then map to a task:
 
-Match the *task* to your goal and data:
-- **Classification** (Weeks 3–5) — "what is this image?" The most tractable; ideal if your problem is one-label-per-image and you have modest data (transfer learning shines).
-- **Detection** (Week 6) — "what objects, and where?" Needs boxed annotations; use when location/counting matters.
-- **Segmentation** (Week 7) — "which pixels?" Needs masks (expensive); use when exact shape matters (medical, precise editing).
+- **Classification** (Weeks 3–5) — "what is this image / region?" One label per image (or per crop). The
+  most tractable; ideal when the decision is a category and transfer learning gives you a strong model from
+  modest data.
+- **Detection** (Week 6) — "what objects, and where?" Needs boxed annotations; use when location or count
+  drives the decision. Report mAP at a *stated* IoU threshold — mAP@0.5 and mAP@[.5:.95] are different
+  claims.
+- **Segmentation** (Week 7) — "which pixels?" Needs masks (the most expensive label); use only when exact
+  shape drives the decision (medical margins, precise editing). Report mIoU or Dice, and say which.
 
 ```mermaid
 flowchart TD
-  Start["What does the problem need"] --> Q1["One label per image"]
-  Start --> Q2["Object locations too"]
-  Start --> Q3["Exact pixel shapes"]
-  Q1 --> Class["Classification"]
-  Q2 --> Det["Detection - needs boxed annotations"]
+  Start["What decision must the system support"] --> Q1["A single category"]
+  Start --> Q2["Category plus location or count"]
+  Start --> Q3["Exact pixel-level shape"]
+  Q1 --> Class["Classification - cheapest labels"]
+  Q2 --> Det["Detection - needs boxes"]
   Q3 --> Seg["Segmentation - needs masks"]
 ```
-*Match the task to what the problem actually needs — annotation cost rises fast down this chain.*
+*Match the task to the decision; annotation cost rises steeply down this chain.*
 
-When unsure, prefer the *simplest task that solves your problem* — classification over detection over segmentation — because annotation cost and difficulty rise sharply. Transfer learning (Week 5) is almost always your starting point regardless of task.
+## The annotation-economics argument
 
-## Baseline first
+Down that chain, labeling cost per image explodes: an image-level label is seconds of work; a set of tight
+boxes is minutes; a pixel-perfect mask can be tens of minutes and is itself noisy at object boundaries.
+Northcutt et al. (2021, "Pervasive Label Errors in Test Sets", NeurIPS Datasets & Benchmarks) found
+label-error rates of several percent even in *canonical* benchmarks like ImageNet — your hand-labeled set
+will be worse. The implication is sharp: **prefer the simplest task that solves your problem** not out of
+laziness but because every dollar spent on unnecessary mask annotation is a dollar not spent on more images,
+harder negatives, or a cleaner test set — the things that actually move a metric. Transfer learning
+(Week 5) is your default starting point regardless of task, because it converts your scarce labels into a
+head on top of features someone else paid millions of GPU-hours to learn.
 
-Before any deep model, establish a **baseline**: a trivial predictor (majority class, a color/size heuristic), a classical-vision approach (Week 2 features), or a simple fine-tuned small model. If your fancy model can't beat the baseline, that's the finding — and you want to know early. The baseline also defines "success."
+## Baseline first — and make it strong
+
+Before any custom training, establish a **baseline** with a documented, reproducible number on held-out
+images. Three tiers, from cheap to strong:
+1. **Trivial** — majority class, a color/size heuristic, a classical-vision detector (Week 2). Establishes
+   the floor and the metric plumbing.
+2. **Fine-tuned small model** — a pretrained backbone with a linear head. The honest workhorse baseline.
+3. **Zero-shot foundation model** — CLIP for classification (Radford et al., 2021, ICML) or SAM for
+   promptable segmentation (Kirillov et al., 2023, ICCV) with *no* training. In 2020s vision this is often a
+   startlingly strong baseline, and if your fine-tuned model cannot beat a zero-shot foundation model, that
+   is a finding you want on day 2, not day 6.
+
+If your model cannot beat the baseline, that is the result — and you want to know early. The baseline also
+*defines success*: "we improved defect recall from 0.71 to 0.88 at fixed precision" is a claim; "our model
+is good" is not.
 
 ## Scope to a working end-to-end slice
 
-Get the *whole pipeline* working small first — load images → train a tiny model → evaluate → serve one prediction — end to end, badly, in a day. Then improve each part. A finished B+ project beats an unfinished A+ one, and vision has extra failure surfaces (data loading, annotation, preprocessing parity) that a working skeleton de-risks early.
+Get the *whole pipeline* working small first — load images → train a tiny model → evaluate → serve one
+prediction — end to end, badly, in a day. Vision has extra failure surfaces (data loading, annotation
+format, preprocessing parity between train and serve) that a working skeleton de-risks before they can
+eat your final week.
 
 ```mermaid
 flowchart LR
   A["Load images"] --> B["Train a tiny model"]
-  B --> C["Evaluate"]
+  B --> C["Evaluate with a metric"]
   C --> D["Serve one prediction"]
 ```
 *Get this whole slice working end to end and badly before improving any single part.*
 
-## Plan the week
+## Plan the week, and reserve time for the writing
 
-Roughly: days 1–2 framing + data + annotation + baseline + end-to-end skeleton; days 3–5 model building and training (transfer learning, the Week-4 toolbox); day 6 evaluation + error analysis + bias check; day 7 deployment, serving, README, model card. Reserve real time for evaluation and writing — the communication is graded, not just the accuracy.
+Roughly: days 1–2 framing + data + annotation + baseline (all three tiers) + end-to-end skeleton; days 3–5
+model building and training (transfer learning, the Week-4 toolbox); day 6 evaluation — *with statistics*,
+calibration, error gallery, and fairness audit; day 7 deployment, drift plan, README, model card, and the
+written defense. The communication and the statistics are graded, not just the accuracy. A finished B+
+project with an honest interval beats an unfinished A+ one with a cherry-picked number.
 
-**Takeaway:** pick a vision task you can finish — the *simplest task that solves your problem*, with images you're allowed to use, a clear metric, and a baseline to beat. Start from transfer learning, get the whole pipeline working small before improving parts, and reserve real time for honest evaluation and writing. Scope for *finished*, not *maximal*.
+**Takeaway:** frame the *decision* first, then pick the *simplest task that supports it* — annotation
+economics and label noise both reward restraint. Establish a strong baseline (up to a zero-shot foundation
+model) with a stated metric and threshold before you train anything, get the whole pipeline working small,
+and reserve real time for statistics, fairness, and writing. Scope for *finished and defensible*, not
+*maximal*.

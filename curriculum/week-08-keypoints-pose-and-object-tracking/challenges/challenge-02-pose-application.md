@@ -1,10 +1,20 @@
-# Challenge 2 — Build a pose-based analyzer
+# Challenge 2 — A pose-based analyzer, with a fairness and privacy audit
 
-Use pose keypoints to *judge* an action — the core of fitness, rehab, and gesture apps — and confront its limits honestly.
+Use pose keypoints to *judge* an action — the core of fitness, rehab, and gesture apps — and
+confront its limits and its ethics honestly.
 
-1. Pick a simple, well-defined task: count squat/pushup repetitions, classify a few yoga poses, detect when arms are raised, or recognize a hand gesture.
-2. Compute your signal from keypoint geometry (e.g. hip–knee–ankle angle for a squat; count reps by thresholding the angle over time). No new training required — reason from the joint coordinates.
-3. Test across different people, camera angles, and clothing. Where does it fail — side views, occluded joints, loose clothing, unusual body types?
-4. Write an honest limitations section: for whom and in what conditions does your analyzer work or fail? (Pose models themselves carry dataset bias.)
+1. Pick a simple, well-defined task: count squat/pushup repetitions, classify a few yoga poses, detect
+   arms-raised, or recognize a hand gesture.
+2. Compute your signal from keypoint geometry (e.g. hip-knee-ankle angle for a squat; count reps by hysteresis
+   thresholding the angle over time to avoid double-counting jitter). No new training — reason from the joint
+   coordinates and their OKS confidences (down-weight or reject low-confidence joints).
+3. **Robustness sweep.** Test across different people, camera angles, clothing, and lighting. Where does it
+   fail — side views, occluded joints, loose clothing, unusual body types, wheelchairs or atypical morphology?
+4. **Fairness and privacy audit.** Pose models carry dataset bias (COCO/MPII skew toward certain populations
+   and viewpoints). Write who your analyzer works and fails for, and — because this processes body video —
+   state the consent basis, what you store versus discard, and what you would refuse to build (e.g. covert
+   monitoring).
 
-**Deliverable:** a working pose-based analyzer with a demo and a candid limitations section naming who/what it fails on. Reasoning geometrically from keypoints — and being honest about bias — is the skill.
+**Deliverable:** a working pose-based analyzer with a demo, a robustness table naming who/what it fails on,
+and an explicit fairness + privacy section. Reasoning geometrically from keypoints — and being honest about
+bias and consent — is the graded skill.

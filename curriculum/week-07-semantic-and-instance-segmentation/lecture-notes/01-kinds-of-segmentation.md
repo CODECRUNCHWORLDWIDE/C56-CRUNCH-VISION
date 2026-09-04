@@ -1,45 +1,73 @@
-# Lecture 1 — Semantic, instance & panoptic segmentation
+# Lecture 1 — Semantic, instance & panoptic: dense prediction as a structured problem
 
-Segmentation is *dense prediction*: instead of one label per image (classification) or a box per object (detection), you predict a label for **every pixel**. But "label every pixel" means different things, and the differences define the task.
+Classification emits one label per image; detection emits a set of boxes; **segmentation** emits a
+label for *every pixel*. But "label every pixel" hides three genuinely different problems, and the differences
+are not cosmetic — they change what output space you are predicting over, and therefore what network, loss, and
+metric are even well-posed.
 
-## Semantic segmentation
+## Three tasks, precisely
 
-Every pixel is assigned a **class** — road, car, person, sky. All cars are the same "car" label; the model does **not** separate one car from another. The output is a label map the same height and width as the image, with an integer class per pixel. Think of it as per-pixel classification.
+Let an image have pixel set `Ω` (the H×W grid) and a label vocabulary `L`. Partition `L` into **"stuff"** classes
+(amorphous, uncountable: sky, road, grass) and **"things"** classes (countable objects: car, person, dog).
 
-Uses: scene understanding for self-driving (drivable area), land-cover mapping from satellites, medical organ delineation.
-
-## Instance segmentation
-
-Every pixel belonging to an **object** gets both a class *and* an instance ID — car #1, car #2, car #3 are distinct masks. It combines detection (find each object) with a per-object mask (its exact pixels). Background/"stuff" (sky, road) is usually *not* segmented — only countable "things."
-
-Uses: counting objects, robotic grasping (which exact object to pick), photo editing (cut out *this* person).
-
-## Panoptic segmentation
-
-The unifying task: **every** pixel gets a label, and countable "things" also get instance IDs while amorphous "stuff" (sky, grass) just gets a class. Semantic + instance in one coherent output, with no overlaps or gaps. It's the most complete scene description and the current research frontier.
-
-## The key distinction, crisply
-
-- **Semantic:** "what class is this pixel?" — cars are one blob.
-- **Instance:** "which object is this pixel, and what class?" — each car separate, stuff ignored.
-- **Panoptic:** both, for every pixel.
-
-Choosing the task is a *requirements* decision: do you need to separate individual objects (instance/panoptic) or is a class map enough (semantic)? Counting cars needs instance; "how much of this field is crop?" needs only semantic.
+- **Semantic segmentation.** Learn `f : Ω → L`. Every pixel gets a *class*; all cars collapse to the single "car"
+  label. The output is one integer map. This is per-pixel classification — nothing separates car #1 from car #2.
+- **Instance segmentation.** Learn a set of `(class, binary-mask)` pairs, one per *object*. Now car #1 and car #2 are
+  distinct masks with distinct IDs. Stuff is usually ignored — you only segment countable things. Note the output is
+  a *variable-length set*, exactly like detection, which is why instance segmentation inherits detection's machinery.
+- **Panoptic segmentation.** The unification (Kirillov et al., *Panoptic Segmentation*, CVPR 2019): learn
+  `f : Ω → L × ℕ` where every pixel gets a class *and*, if it is a thing, an instance ID; stuff pixels get a class and
+  a null/shared ID. Crucially, the output is a **non-overlapping** partition — no pixel has two labels, no pixel is
+  unlabeled. Panoptic is the most complete scene description and forced the field to define a single coherent metric
+  (Panoptic Quality, Lecture 3) rather than bolting semantic mIoU next to instance mask-AP.
 
 ```mermaid
 flowchart TD
   A["Need a label for every pixel"] --> B{"Separate individual objects?"}
-  B -- No --> C["Semantic segmentation"]
-  B -- Yes --> D{"Also label the stuff classes"}
-  D -- No --> E["Instance segmentation"]
-  D -- Yes --> F["Panoptic segmentation"]
+  B -- No --> C["Semantic segmentation<br/>f: Ω → class"]
+  B -- Yes --> D{"Also label the stuff?"}
+  D -- No --> E["Instance segmentation<br/>set of (class, mask)"]
+  D -- Yes --> F["Panoptic segmentation<br/>f: Ω → (class, instance-id), a partition"]
 ```
-*Picking a segmentation task from what the pixels need to represent.*
+*Picking the task from what the pixels must represent — and note the output space changes with each branch.*
 
-## Why it's harder than classification
+## Why the choice is a requirements decision, not a preference
 
-- **Output is high-dimensional** — a full-resolution label map, not a single number.
-- **Boundaries are hard** — pixels at object edges are ambiguous and dominate the error.
-- **Labels are expensive** — annotating per-pixel masks is far costlier than image labels or even boxes, which shapes what data you'll have.
+Ask: *do I need to count / separate individual objects?* "How much of this field is planted?" is **semantic** — a
+class map suffices, and instance IDs are wasted effort. "How many cars are in the lot?" needs **instance**. "Give me a
+complete, gap-free scene layout for a planner" needs **panoptic**. Getting this wrong is a real project error: teams
+routinely reach for Mask R-CNN (heavy, box-mediated) when a lightweight semantic U-Net would answer the actual
+question, or run semantic segmentation and then discover downstream they cannot tell two touching cells apart.
 
-**Takeaway:** segmentation predicts a label per pixel. Semantic = per-pixel class (objects of a class merge); instance = separate each object with a mask (stuff ignored); panoptic = both, everywhere. Pick the task from whether you must separate individual objects. Dense prediction is harder — boundaries are ambiguous and masks are expensive to label.
+## Why dense prediction is genuinely harder than classification
+
+1. **The output is high-dimensional and structured.** You predict `|Ω|` coupled labels, not one. Neighboring pixels
+   are highly correlated (a spatial Markov structure); a good model exploits that (CRFs historically did so
+   explicitly; modern nets do so implicitly through large receptive fields). Treating pixels as independent — which the
+   naive per-pixel cross-entropy loss does — is a modeling approximation you should be aware of.
+2. **Error concentrates at boundaries.** Interior pixels are easy; the hard, ambiguous, and disproportionately
+   error-prone pixels are the O(√area) boundary pixels. A metric that averages over all pixels can be dominated by
+   easy interior and never "see" a systematically wrong boundary. This is why boundary-aware metrics exist (Lecture 3).
+3. **Labels are expensive and noisy.** A per-pixel mask costs far more to annotate than an image label or even a box —
+   Cityscapes reports ~1.5 hours per image for fine annotation (Cordts et al., CVPR 2016). And annotators genuinely
+   *disagree* at boundaries, so the ground truth itself has irreducible noise: there is a ceiling on any achievable
+   score, and "the model is wrong" and "the label is wrong" are not always separable.
+4. **Class imbalance is severe.** A tumor may be <1% of pixels; a lane marking a fraction of a percent. A loss that
+   averages per-pixel is dominated by background, so the network can score well by ignoring the very thing you care
+   about (the pixel-scale version of the accuracy trap from Weeks 2 and 4). This motivates the specialized losses of
+   Lecture 4.
+
+## The crisp distinction to carry forward
+
+- **Semantic:** "what class is this pixel?" — same-class objects merge into one blob.
+- **Instance:** "which object is this pixel, and what class?" — each object separated; stuff ignored.
+- **Panoptic:** both, as a gap-free non-overlapping partition of the whole image.
+
+Everything else this week — encoder-decoders, atrous convolution, mask branches, query-based prediction, IoU/Dice/PQ,
+and the loss zoo — exists to make one of these three well-posed predictions accurate, and to measure it honestly.
+
+**Takeaway:** segmentation is structured per-pixel prediction, and the three tasks differ in *output space*, not just
+resolution: semantic maps pixels to classes (objects merge), instance maps to a variable-length set of masks (stuff
+ignored), panoptic to a gap-free labeled+instanced partition. It is harder than classification because the output is
+high-dimensional and spatially coupled, error lives at thin boundaries, labels are costly and noisy, and class
+imbalance is severe — each of which drives an architecture or loss choice in the rest of the week.

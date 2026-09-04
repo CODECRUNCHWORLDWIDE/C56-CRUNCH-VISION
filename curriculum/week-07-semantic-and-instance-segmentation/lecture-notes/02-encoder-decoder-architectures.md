@@ -1,51 +1,98 @@
-# Lecture 2 — Encoder–decoders, U-Net & Mask R-CNN
+# Lecture 2 — The resolution tension: FCN, U-Net, DeepLab, and Mask R-CNN
 
-To output a full-resolution label map, a network must first *understand* the image (which needs coarse, deep features) and then *recover spatial detail* (to place labels precisely). The **encoder–decoder** architecture does exactly this, and it dominates segmentation.
+To output a full-resolution label map, a network faces a genuine conflict. To know *what* is in a region it
+needs a **large receptive field**, which classification CNNs buy by downsampling — five stride-2 stages take a
+224×224 image down to 7×7, a 32× reduction. But to place a boundary *where* it belongs it needs **high spatial
+resolution**, which downsampling destroys. This single tension — receptive field versus resolution — is the axis on
+which every segmentation architecture is designed. This lecture derives the three canonical escapes.
 
-## The problem with a plain CNN
+## Quantifying the tension: receptive field vs. resolution
 
-A classification CNN downsamples aggressively (Week 3) — great for "what," terrible for "where." By the final layer, spatial resolution is tiny; you can't recover pixel-precise boundaries from a 7×7 feature grid. Segmentation needs both semantic depth *and* spatial precision.
+Stack convolutions and strides and the theoretical receptive field grows, while resolution shrinks. For a chain of
+layers with kernel sizes `k_i`, strides `s_i`, and cumulative stride `S_i = Π_{j<i} s_j`, the receptive field grows as
 
-## The encoder–decoder solution
+    RF_out = RF_in + (k − 1)·S,     applied layer by layer.
 
-- **Encoder** (downsampling path) — a standard CNN backbone that reduces resolution while building rich, deep features. Captures *what* is in the image. Often a pretrained backbone (transfer learning again).
-- **Decoder** (upsampling path) — progressively *upsamples* the deep features back to full resolution (via transposed convolutions or interpolation + conv), refining the coarse "what" into a dense "where."
+A ResNet-50 backbone reaches a receptive field of hundreds of pixels but at 1/32 resolution: a single output cell
+"sees" a wide context but *is* a 32×32 patch of the input. You cannot recover a pixel-precise boundary from a 7×7
+grid — the information was thrown away. The escapes below each restore either resolution or receptive field without
+paying the other's price.
 
-The output is a per-pixel class map at input resolution.
+## Escape 1 — Fully-convolutional nets and learned upsampling (FCN)
 
-## U-Net and skip connections
+Long, Shelhamer & Darrell (*Fully Convolutional Networks for Semantic Segmentation*, CVPR 2015) made the key move:
+replace the classifier's final fully-connected layers with 1×1 convolutions, so the network outputs a coarse *class
+map* instead of a vector, then **upsample** it back to full resolution with learned **transposed convolutions**
+(a.k.a. deconvolution — a convolution whose forward pass is the backward pass of a strided conv). FCN also added
+**skip connections** from earlier, higher-resolution stages (FCN-8s fuses the 1/8, 1/16, 1/32 predictions), because
+the 1/32 prediction alone is hopelessly coarse. This is the birth of the *encoder–decoder*: an encoder that
+downsamples to build semantics, a decoder that upsamples to recover space.
 
-The decisive trick, from **U-Net** (born in biomedical imaging): **skip connections** that copy high-resolution features from each encoder stage directly to the matching decoder stage. Why it matters: the encoder's deep features know *what* but have lost *where*; the early encoder features still hold *where* (sharp edges) but not *what*. Skips let the decoder combine both — semantic context from deep layers, precise boundaries from shallow ones. Without skips, masks are blurry blobs; with them, they hug object edges.
+Pitfall: naive transposed convolution produces **checkerboard artifacts** (Odena et al., 2016) because kernel windows
+overlap unevenly. The common fix is *resize (bilinear/nearest) then convolve*, which most modern decoders use.
+
+## Escape 2 — U-Net: symmetric decoder with dense skips
+
+Ronneberger, Fischer & Brox (*U-Net*, MICCAI 2015), designed for biomedical microscopy with *tiny* training sets,
+made skips the centerpiece. The architecture is a symmetric "U": a contracting encoder and an expansive decoder, with
+a skip connection at **every** resolution level that *concatenates* the encoder's high-resolution feature map onto the
+decoder's upsampled feature map before the next conv block.
+
+The argument for why skips are decisive: the encoder's deep features know *what* (semantics) but have lost *where*
+(they are coarse); the shallow encoder features still hold *where* (sharp edges) but not *what*. Concatenation lets
+the decoder's conv learn to fuse both — semantic context from the deep path, precise localization from the skip.
+Ablate the skips and masks degrade to blurry blobs; add them and masks hug edges (you will verify this in Challenge 1).
 
 ```mermaid
 flowchart LR
-  I["Input image"] --> E1["Encoder stage 1"] --> E2["Encoder stage 2"] --> E3["Encoder stage 3"] --> E4["Encoder stage 4 deep features"]
-  E4 --> D3["Decoder stage 3"]
-  E3 -. skip .-> D3
-  D3 --> D2["Decoder stage 2"]
-  E2 -. skip .-> D2
-  D2 --> D1["Decoder stage 1"]
-  E1 -. skip .-> D1
-  D1 --> M["Output mask"]
+  I["Input"] --> E1["Enc 1"] --> E2["Enc 2"] --> E3["Enc 3"] --> E4["Enc 4 (deep, coarse)"]
+  E4 --> D3["Dec 3"]
+  E3 -. concat skip .-> D3
+  D3 --> D2["Dec 2"]
+  E2 -. concat skip .-> D2
+  D2 --> D1["Dec 1"]
+  E1 -. concat skip .-> D1
+  D1 --> M["Full-res mask"]
 ```
-*Skip connections carry shallow, high-resolution features across to the matching decoder stage.*
+*U-Net: a skip at every level fuses deep 'what' with shallow high-resolution 'where'.*
 
-```
-encoder: img -> f1 -> f2 -> f3 -> f4 (deep, coarse)
-decoder: f4 -> up + skip(f3) -> up + skip(f2) -> up + skip(f1) -> mask
-```
+U-Net remains the default for medical and small-data segmentation; the self-configuring **nnU-Net** (Isensee et al.,
+*Nature Methods* 2021) showed a well-tuned U-Net still beats most fancier architectures on medical benchmarks — a
+sobering reminder that data and configuration often dominate architecture.
 
-U-Net and its descendants (DeepLab with atrous/dilated convolutions and a pyramid pooling module for multi-scale context) are the semantic-segmentation workhorses.
+## Escape 3 — DeepLab: atrous convolution enlarges the receptive field *without* downsampling
 
-## Mask R-CNN for instance segmentation
+Chen et al. (*DeepLab*, TPAMI 2018) took the opposite tack: instead of downsampling and then fighting to upsample, keep
+resolution high and enlarge the receptive field directly with **atrous (dilated) convolution**. An atrous conv with
+dilation rate `r` inserts `r−1` zeros between kernel taps, so a 3×3 kernel covers a `(2r+1)×(2r+1)` field but uses only
+9 weights and no extra compute — its effective stride is 1, so resolution is preserved.
 
-Instance segmentation reuses detection: **Mask R-CNN** extends Faster R-CNN (Week 6) by adding a small **mask branch** that predicts a binary mask for *each detected box*. So it detects each object (box + class, with NMS) and then segments the pixels *inside* each box. This "detect then mask" design is why instance segmentation inherits detection's machinery — and its metrics blend detection's mAP with mask IoU.
+Two more DeepLab ideas: **Atrous Spatial Pyramid Pooling (ASPP)** runs several atrous convs at different rates in
+parallel (plus image-level pooling) to capture objects at multiple scales in one layer — a wide multi-rate receptive
+field with full resolution. DeepLabV3+ adds a light decoder to sharpen boundaries. DeepLab trades the memory of
+high-resolution feature maps for the boundary fidelity FCN had to reconstruct.
 
-## Choosing an architecture
+## Instance segmentation: Mask R-CNN and the RoIAlign argument
 
-- Semantic, medical/satellite, limited data → **U-Net** (it was designed for exactly this).
-- Semantic, complex scenes, multi-scale → **DeepLab**.
-- Instance (separate objects) → **Mask R-CNN** or a modern one-stage instance segmenter (YOLO-seg).
-- You'll typically fine-tune a pretrained one, not build from scratch.
+Instance masks reuse detection. He et al. (*Mask R-CNN*, ICCV 2017) extend Faster R-CNN (Week 6) with a third head: a
+small FCN **mask branch** that, for each detected RoI, predicts a per-class binary mask (typically 28×28) inside the
+box. "Detect then mask." The subtle, prize-winning contribution is **RoIAlign**. Faster R-CNN's RoIPool *quantizes*
+RoI coordinates twice (to the feature grid, then into pooling bins), misaligning features by up to a pixel or two —
+tolerable for a box, ruinous for a pixel-precise mask. RoIAlign removes both quantizations: it samples feature values
+at exact fractional RoI coordinates with **bilinear interpolation**, keeping the mask branch spatially faithful. This
+single fix gave a large mask-AP jump — a clean lesson that sub-pixel alignment matters enormously for dense outputs.
 
-**Takeaway:** segmentation needs semantic depth *and* spatial precision, so it uses an encoder (downsample, understand 'what') plus a decoder (upsample, recover 'where'). U-Net's skip connections fuse deep semantics with shallow high-resolution detail — the reason masks hug boundaries. Mask R-CNN gets instance masks by adding a per-object mask branch to a detector.
+## Choosing among them
+
+- Semantic, medical/satellite, limited data → **U-Net** (often nnU-Net), the designed-for-this default.
+- Semantic, complex multi-scale scenes → **DeepLabV3+** (atrous + ASPP + decoder).
+- Instance (separate objects) → **Mask R-CNN** or a one-stage instance segmenter (YOLO-seg, SOLOv2).
+- Panoptic / state of the art → query-based unified models (Lecture 5).
+- You will almost always fine-tune a pretrained backbone rather than train from scratch — the encoder is exactly the
+  transfer-learning backbone from Weeks 4–5.
+
+**Takeaway:** segmentation is a fight between receptive field and resolution. FCN/U-Net *downsample then learn to
+upsample*, with skip connections fusing deep semantics and shallow detail (the reason masks hug boundaries); DeepLab
+*keeps resolution and dilates* with atrous convolution + ASPP for multi-scale context at full resolution; Mask R-CNN
+gets instance masks by adding an FCN mask head to a detector, with RoIAlign's bilinear sub-pixel sampling as the
+decisive fix that box-based detectors could ignore but pixel masks cannot.

@@ -1,88 +1,215 @@
 # Week 7 — Quiz
 
-Ten questions. Answer key below.
+Fifteen questions spanning the three tasks, the receptive-field-vs-resolution tension and its architectural escapes, RoIAlign, the IoU/Dice/PQ derivations, the loss zoo, query-based segmenters, and high-stakes evaluation. Attempt each before the answer key.
 
-**1. Semantic segmentation assigns:**
+**1. The output *space* of instance segmentation differs from semantic segmentation because instance segmentation predicts:**
 
-- A. A box per object
-- B. An instance ID to every pixel
-- C. A class to every pixel, merging same-class objects
-- D. One label to the whole image
+- A. only bounding boxes, no pixel masks
+- B. a class for every pixel including all stuff regions, with no instance IDs
+- C. a single integer label map with one class per pixel
+- D. a variable-length set of (class, binary-mask) pairs, one per object
 
-**2. Instance segmentation differs from semantic by:**
+<details>
+<summary>Answer</summary>
 
-- A. Separating each object with its own mask and instance ID
-- B. Only working on backgrounds
-- C. Using boxes only
-- D. Labeling no pixels
+**D. a variable-length set of (class, binary-mask) pairs, one per object** — Instance segmentation emits a set of per-object masks (like detection, variable length); semantic emits one class map that merges same-class objects.
 
-**3. Panoptic segmentation:**
+</details>
 
-- A. Only detects boxes
-- B. Is the same as classification
-- C. Labels every pixel, giving instance IDs to things and a class to stuff
-- D. Ignores stuff
+**2. Panoptic segmentation's defining structural constraint on its output is that it is:**
 
-**4. An encoder–decoder is used for segmentation because it:**
+- A. allowed to leave stuff pixels unlabeled
+- B. identical to running semantic and instance models independently
+- C. a gap-free, non-overlapping partition: every pixel gets exactly one (class, id) label
+- D. a set of possibly-overlapping instance masks with background ignored
 
-- A. Only downsamples
-- B. Needs no convolutions
-- C. Builds deep 'what' features (encoder) then recovers spatial 'where' at full resolution (decoder)
-- D. Avoids pretrained backbones
+<details>
+<summary>Answer</summary>
 
-**5. U-Net's skip connections:**
+**C. a gap-free, non-overlapping partition: every pixel gets exactly one (class, id) label** — Panoptic requires every pixel to have exactly one label (things instanced, stuff classed) with no overlaps or gaps — which is why it needed its own coherent metric (PQ).
 
-- A. Speed up training only
-- B. Add classes
-- C. Remove the decoder
-- D. Copy high-resolution encoder features to the decoder so masks have sharp boundaries
+</details>
 
-**6. Mask R-CNN produces instance masks by:**
+**3. A classification backbone at 1/32 resolution cannot directly produce pixel-precise masks because:**
 
-- A. Segmenting the whole image at once
-- B. Using only edges
-- C. Adding a per-object mask branch on top of a detector (Faster R-CNN)
-- D. Classifying pixels randomly
+- A. convolutions cannot be applied to segmentation
+- B. softmax is undefined over spatial dimensions
+- C. its receptive field is too small to see whole objects
+- D. downsampling has discarded the spatial detail a boundary needs; a 7×7 grid cannot localize an edge
 
-**7. Pixel accuracy is a poor segmentation metric because:**
+<details>
+<summary>Answer</summary>
 
-- A. It is too slow
-- B. It equals IoU
-- C. It needs masks
-- D. Background/majority pixels dominate, hiding missed small objects
+**D. downsampling has discarded the spatial detail a boundary needs; a 7×7 grid cannot localize an edge** — The receptive field is large but resolution is destroyed — you cannot recover a pixel-precise boundary from a coarse grid. This is the receptive-field-vs-resolution tension.
 
-**8. Mean IoU (mIoU) averages IoU:**
+</details>
 
-- A. Over classes, weighting each class equally
-- B. Over epochs
-- C. Over images only
-- D. Over pixels
+**4. U-Net's skip connections are decisive because they:**
 
-**9. The Dice coefficient is favored in medical imaging and:**
+- A. concatenate shallow high-resolution 'where' features onto deep 'what' features in the decoder, so masks hug boundaries
+- B. replace the decoder entirely with the encoder
+- C. reduce the number of parameters the decoder needs
+- D. only speed up training without affecting mask quality
 
-- A. Is often used as a differentiable loss that handles class imbalance well
-- B. Equals pixel accuracy
-- C. Cannot be a loss
-- D. Ignores overlap
+<details>
+<summary>Answer</summary>
 
-**10. Instance segmentation is evaluated with:**
+**A. concatenate shallow high-resolution 'where' features onto deep 'what' features in the decoder, so masks hug boundaries** — Deep features know 'what' but lost 'where'; skips carry sharp shallow features across so the decoder can fuse both — the reason masks are sharp rather than blobby.
 
-- A. Box IoU only
-- B. Dice on the whole image
-- C. Mask AP / mask mAP (matching by mask IoU)
-- D. Pixel accuracy only
+</details>
+
+**5. DeepLab's atrous (dilated) convolution enlarges the receptive field without losing resolution by:**
+
+- A. inserting zeros between kernel taps so a 3×3 kernel covers a larger field at stride 1, with no extra weights
+- B. cropping the feature map to the object
+- C. using a fully-connected layer at the output
+- D. adding more downsampling stages
+
+<details>
+<summary>Answer</summary>
+
+**A. inserting zeros between kernel taps so a 3×3 kernel covers a larger field at stride 1, with no extra weights** — Dilation rate r spaces the kernel taps to cover a (2r+1)×(2r+1) field using only 9 weights and stride 1, so resolution is preserved — the opposite escape from encoder-decoder upsampling.
+
+</details>
+
+**6. Mask R-CNN's RoIAlign improved mask quality over RoIPool chiefly by:**
+
+- A. removing the coordinate quantizations and sampling features at exact fractional RoI locations via bilinear interpolation
+- B. adding non-maximum suppression to the mask branch
+- C. using a larger backbone
+- D. predicting masks at the full image resolution directly
+
+<details>
+<summary>Answer</summary>
+
+**A. removing the coordinate quantizations and sampling features at exact fractional RoI locations via bilinear interpolation** — RoIPool quantizes RoI coordinates twice, misaligning features by up to ~1–2 pixels — tolerable for a box, ruinous for a pixel mask. RoIAlign's bilinear sub-pixel sampling fixes it.
+
+</details>
+
+**7. Given IoU = 0.5, the Dice coefficient equals:**
+
+- A. 2/3 (from Dice = 2·IoU/(1+IoU))
+- B. 1.0
+- C. 0.5 (they are always equal)
+- D. 0.25
+
+<details>
+<summary>Answer</summary>
+
+**A. 2/3 (from Dice = 2·IoU/(1+IoU))** — Dice = 2(0.5)/(1+0.5) = 1/1.5 = 2/3. Dice ≥ IoU on [0,1], and the map is strictly increasing so they rank models identically.
+
+</details>
+
+**8. mIoU averages IoU over classes with equal weight *on purpose* because:**
+
+- A. it is faster to compute than per-class IoU
+- B. classes with more pixels should count more
+- C. it makes the score always higher than pixel accuracy
+- D. it prevents a rare, poorly-segmented class from hiding behind common ones
+
+<details>
+<summary>Answer</summary>
+
+**D. it prevents a rare, poorly-segmented class from hiding behind common ones** — Equal per-class weighting means a rare class you segment badly still tanks the mean — a feature. The cost: a tiny class's IoU can be volatile, so you always report per-class IoU too.
+
+</details>
+
+**9. Panoptic Quality factorizes as PQ = SQ × RQ, where SQ and RQ respectively capture:**
+
+- A. semantic quality and regional quality of stuff only
+- B. spatial resolution and receptive field
+- C. how good the matched masks are (avg IoU of matches) and how many segments were correctly found without duplicates (an F1-like term)
+- D. the softmax quality and the ReLU quality
+
+<details>
+<summary>Answer</summary>
+
+**C. how good the matched masks are (avg IoU of matches) and how many segments were correctly found without duplicates (an F1-like term)** — SQ = mean IoU over matched (TP) segments; RQ = |TP|/(|TP|+½|FP|+½|FN|), an F1 on segment recognition. A model can have tight masks (high SQ) yet miss objects (low RQ) or vice versa.
+
+</details>
+
+**10. Pixel accuracy is a misleading segmentation metric primarily because:**
+
+- A. it is mathematically equal to IoU
+- B. it over-weights small objects
+- C. it cannot be computed without ground-truth masks
+- D. background/majority pixels dominate the count, so a model can score high while missing every small object
+
+<details>
+<summary>Answer</summary>
+
+**D. background/majority pixels dominate the count, so a model can score high while missing every small object** — Weighting every pixel equally means the large stuff regions dominate; predicting the majority class everywhere scores high while missing small things — the accuracy trap at pixel scale.
+
+</details>
+
+**11. Soft-Dice loss survives severe foreground/background imbalance where plain cross-entropy fails because:**
+
+- A. it ignores the background pixels entirely by masking them out
+- B. it is computed only on boundary pixels
+- C. the class fraction cancels in its ratio, making it scale-invariant to object size
+- D. it has a larger learning rate
+
+<details>
+<summary>Answer</summary>
+
+**C. the class fraction cancels in its ratio, making it scale-invariant to object size** — Dice's numerator and denominator both scale with region size, so a 100-pixel tumor and a huge organ contribute comparably; CE instead sums per pixel, so background dominates its gradient.
+
+</details>
+
+**12. Focal loss modifies cross-entropy by multiplying it by (1−p_t)^γ, which:**
+
+- A. converts it into the Dice loss
+- B. removes the logarithm from cross-entropy
+- C. down-weights easy, well-classified pixels so gradient concentrates on hard/rare ones
+- D. up-weights easy background pixels for stability
+
+<details>
+<summary>Answer</summary>
+
+**C. down-weights easy, well-classified pixels so gradient concentrates on hard/rare ones** — For an easy pixel p_t→1 the factor →0, so easy examples contribute almost nothing and the loss focuses on hard, ambiguous pixels — 'soft hard-example mining' with no sampling heuristic.
+
+</details>
+
+**13. The Lovász-Softmax loss is principled as an IoU surrogate because it uses:**
+
+- A. the Lovász convex extension of the Jaccard set function, which is submodular
+- B. the exact non-differentiable IoU with a straight-through estimator
+- C. a second-order Taylor expansion of pixel accuracy
+- D. a random relaxation of the mask boundary
+
+<details>
+<summary>Answer</summary>
+
+**A. the Lovász convex extension of the Jaccard set function, which is submodular** — The Jaccard loss over pixel errors is submodular; its tight piecewise-linear convex Lovász extension is differentiable and directly targets IoU (Berman et al., CVPR 2018).
+
+</details>
+
+**14. Query-based mask-classification models (MaskFormer/Mask2Former) unify semantic, instance, and panoptic segmentation by:**
+
+- A. predicting a fixed set of queries, each emitting a class and a whole-image mask, matched to ground truth by bipartite matching
+- B. detecting boxes first and then applying NMS to the masks
+- C. using only atrous convolution at multiple rates
+- D. running three separate CNN heads and averaging their outputs
+
+<details>
+<summary>Answer</summary>
+
+**A. predicting a fixed set of queries, each emitting a class and a whole-image mask, matched to ground truth by bipartite matching** — Following DETR's set-prediction view, each query predicts (class, mask); the three tasks differ only in post-processing, and there is no box or NMS — objects are separated by which query claims them.
+
+</details>
+
+**15. In a high-stakes medical or driving deployment, the reason to report per-class (not just mean) IoU and evaluate on the long tail is that:**
+
+- A. aggregate mIoU can be high while the model systematically fails on rare, safety-critical classes
+- B. the mean is undefined when a class is rare
+- C. per-class IoU is required to compute pixel accuracy
+- D. it makes the score look better to reviewers
+
+<details>
+<summary>Answer</summary>
+
+**A. aggregate mIoU can be high while the model systematically fails on rare, safety-critical classes** — A rare pedestrian/tumor class can be badly segmented while the mean stays high; safety requires cost-weighted, per-class, out-of-distribution evaluation plus calibration — not a single i.i.d. average.
+
+</details>
 
 ---
-
-## Answer key
-
-1. **C. A class to every pixel, merging same-class objects** — Semantic = per-pixel class; all cars share the 'car' label, not separated.
-2. **A. Separating each object with its own mask and instance ID** — Instance separates object #1 from object #2 (countable 'things'), unlike semantic.
-3. **C. Labels every pixel, giving instance IDs to things and a class to stuff** — It unifies semantic + instance for a complete per-pixel scene description.
-4. **C. Builds deep 'what' features (encoder) then recovers spatial 'where' at full resolution (decoder)** — Segmentation needs both semantic depth and spatial precision.
-5. **D. Copy high-resolution encoder features to the decoder so masks have sharp boundaries** — Skips fuse deep 'what' with shallow 'where', giving boundary-hugging masks.
-6. **C. Adding a per-object mask branch on top of a detector (Faster R-CNN)** — It detects each object, then predicts a mask inside each box — 'detect then mask'.
-7. **D. Background/majority pixels dominate, hiding missed small objects** — Labeling everything background can score high while missing every object.
-8. **A. Over classes, weighting each class equally** — Per-class averaging stops rare classes from hiding behind common ones.
-9. **A. Is often used as a differentiable loss that handles class imbalance well** — Dice = 2·IoU/(1+IoU); it's a common imbalance-robust loss for tiny targets.
-10. **C. Mask AP / mask mAP (matching by mask IoU)** — Mask mAP blends detection quality with per-object mask overlap.

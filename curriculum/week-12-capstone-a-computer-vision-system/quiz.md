@@ -1,88 +1,215 @@
 # Week 12 — Quiz
 
-Ten questions — a capstone-readiness check. Answer key below.
+Fifteen questions spanning statistical evaluation (intervals, paired tests, proper scoring), calibration, fairness auditing, deployment parity and drift, foundation-model baselines, and the law. Attempt each before the answer key.
 
-**1. The most common capstone failure is:**
+**1. You report 88% accuracy on a 500-image test set. The single most important thing to add before calling this a result is:**
 
-- A. Too much documentation
-- B. Too small a model
-- C. Scoping too big/vague to finish or evaluate
-- D. Using transfer learning
+- A. the number of epochs
+- B. a confidence interval (e.g., Wilson) and the n behind the estimate
+- C. a second decimal place of precision
+- D. the GPU model you trained on
 
-**2. When unsure which task to use, you should generally prefer:**
+<details>
+<summary>Answer</summary>
 
-- A. The simplest task that solves your problem (classification over detection over segmentation)
-- B. Whatever needs the most annotation
-- C. None — skip framing
-- D. The most complex (segmentation) always
+**B. a confidence interval (e.g., Wilson) and the n behind the estimate** — A metric is a random variable; without an interval and the n, 0.88 is a point with unknown precision and cannot be compared honestly.
 
-**3. Before building a deep model you should establish:**
+</details>
 
-- A. A t-SNE plot
-- B. A GPU cluster
-- C. A metric and a baseline to beat
-- D. A Vision Transformer
+**2. To prove your model's accuracy genuinely beats the baseline on the same test set, the appropriate test is:**
 
-**4. Metrics must be reported on:**
+- A. McNemar's test on the disagreement counts b and c
+- B. reporting whichever model won on more random seeds
+- C. a chi-square test on the confusion matrix
+- D. an unpaired t-test on the two accuracies
 
-- A. The training images
-- B. Any images
-- C. The validation set you tuned against
-- D. Held-out images the model never saw and you didn't tune on
+<details>
+<summary>Answer</summary>
 
-**5. To prevent leakage in a vision dataset, you split:**
+**A. McNemar's test on the disagreement counts b and c** — Same-test-set comparison is paired; McNemar uses only the discordant pairs (b, c) and tests them against Binomial(b+c, 0.5).
 
-- A. Randomly per image always
-- B. By group — near-duplicates, same-subject photos, and same-video frames stay in one split
-- C. By file size
-- D. Not at all
+</details>
 
-**6. Vision's advantage for error analysis is that you can:**
+**3. For a metric with no closed-form variance (mAP, mIoU, F1), the right way to get a 95% interval is:**
 
-- A. Only report one number
-- B. Avoid held-out data
-- C. Skip it
-- D. See the mistakes — a gallery of misclassified images reveals patterns
+- A. divide the metric by the number of classes
+- B. the Wald formula p̂ ± 1.96√(p̂(1−p̂)/n)
+- C. assume it is exactly the clean number
+- D. a nonparametric bootstrap: resample the test set with replacement B times and take percentiles
 
-**7. Reporting per-subgroup performance matters because:**
+<details>
+<summary>Answer</summary>
 
-- A. It's faster
-- B. Overall accuracy can hide poor performance on underrepresented groups — an ethical must
-- C. It needs no data
-- D. It replaces the baseline
+**D. a nonparametric bootstrap: resample the test set with replacement B times and take percentiles** — The bootstrap resamples the empirical distribution to approximate the sampling distribution of any metric, including ones with no closed form.
 
-**8. The #1 thing to verify when deploying a vision model is:**
+</details>
 
-- A. Preprocessing parity between training and the served pipeline
-- B. The GPU brand
-- C. The optimizer name
-- D. The number of layers
+**4. Your test images are frames sampled from a few videos. When bootstrapping, you must resample:**
 
-**9. A model card for a vision system should include:**
+- A. individual frames, for more resamples
+- B. pixels within each frame
+- C. only the misclassified frames
+- D. whole videos (groups), not individual frames
 
-- A. Intended use, data provenance, per-subgroup metrics, failure modes, and privacy/consent/bias notes
-- B. The GPU temperature
-- C. The learning rate only
-- D. Only the accuracy
+<details>
+<summary>Answer</summary>
 
-**10. The best capstones handle their weaknesses by:**
+**D. whole videos (groups), not individual frames** — Correlated frames within a video are not independent; resampling frames understates variance exactly as within-video leakage does. Resample groups.
 
-- A. Overclaiming results
-- B. Hiding them
-- C. Explaining them honestly — failures, bias, and next steps
-- D. Ignoring evaluation
+</details>
+
+**5. A softmax output of 0.99 on a modern deep classifier means:**
+
+- A. the model is right 99% of the time at that confidence
+- B. nothing about accuracy, because modern nets are systematically overconfident
+- C. the model is calibrated by construction
+- D. the class is one-hot in training
+
+<details>
+<summary>Answer</summary>
+
+**B. nothing about accuracy, because modern nets are systematically overconfident** — Guo et al. (2017) showed modern nets are overconfident; confidence must be validated with a reliability diagram/ECE before it is trusted.
+
+</details>
+
+**6. Expected Calibration Error (ECE) measures:**
+
+- A. the number of misclassified images
+- B. the variance of the logits
+- C. the accuracy on the test set
+- D. the accuracy-weighted average gap between confidence and empirical accuracy across bins
+
+<details>
+<summary>Answer</summary>
+
+**D. the accuracy-weighted average gap between confidence and empirical accuracy across bins** — ECE = Σ (n_b/n)|acc(b) − conf(b)|; it summarizes how far confidence departs from realized accuracy across confidence bins.
+
+</details>
+
+**7. Temperature scaling to fix calibration works by dividing the logits by a scalar T, which:**
+
+- A. changes the argmax and so improves accuracy
+- B. leaves the argmax (accuracy) unchanged while adjusting the probabilities
+- C. requires retraining the whole network
+- D. only works for detection
+
+<details>
+<summary>Answer</summary>
+
+**B. leaves the argmax (accuracy) unchanged while adjusting the probabilities** — Dividing all logits by one T is monotonic, so it cannot change the top class or accuracy; it only softens/sharpens the probability vector.
+
+</details>
+
+**8. A system that is 95% accurate overall but 68% on one underrepresented subgroup should be reported by leading with:**
+
+- A. the worst-group metric and the disparity between groups
+- B. the 95% overall number, since it is the average
+- C. nothing about subgroups; overall accuracy suffices
+- D. only the subgroup it does best on
+
+<details>
+<summary>Answer</summary>
+
+**A. the worst-group metric and the disparity between groups** — Overall accuracy hides subgroup harm (Buolamwini & Gebru, 2018); the worst-group metric and disparity are the ethically load-bearing numbers.
+
+</details>
+
+**9. The proper scoring rule that punishes a confident wrong prediction most severely is:**
+
+- A. negative log-likelihood (cross-entropy)
+- B. the number of parameters
+- C. mean IoU
+- D. top-1 accuracy
+
+<details>
+<summary>Answer</summary>
+
+**A. negative log-likelihood (cross-entropy)** — NLL sends the loss toward infinity as the probability assigned to the true class goes to zero, so a confident miss is penalized enormously.
+
+</details>
+
+**10. The single most common silent bug when deploying a vision model behind an API is:**
+
+- A. the number of layers changed
+- B. the GPU brand differs from training
+- C. preprocessing mismatch: resize/normalize/channel-order differs from training
+- D. the optimizer name is wrong
+
+<details>
+<summary>Answer</summary>
+
+**B. the GPU brand differs from training** — Preprocessing parity failures throw no exception and quietly collapse accuracy; verify with a golden test comparing training-time and served outputs.
+
+</details>
+
+**11. In production you cannot compute accuracy because there are no labels. To monitor for drift you instead track:**
+
+- A. proxies: predicted-class distribution, mean confidence, embedding-distribution distance, and spot checks
+- B. the number of API calls only
+- C. the model file size
+- D. the training loss
+
+<details>
+<summary>Answer</summary>
+
+**A. proxies: predicted-class distribution, mean confidence, embedding-distribution distance, and spot checks** — Without labels you monitor input/output distribution proxies and a small human-reviewed stream; shifts in these signal drift and can trigger a retrain.
+
+</details>
+
+**12. You tried 20 architectures and report the best one's test accuracy. Your reported number is:**
+
+- A. unbiased, because the test set was held out
+- B. biased upward, because you implicitly ran 20 tests and kept the luckiest
+- C. biased downward
+- D. unaffected by the number of models tried
+
+<details>
+<summary>Answer</summary>
+
+**B. biased upward, because you implicitly ran 20 tests and kept the luckiest** — Selecting the max over many test-set evaluations is a multiple-comparisons problem; select on validation and evaluate the chosen model on test once.
+
+</details>
+
+**13. Why must your capstone compare against a zero-shot foundation model (e.g., CLIP or SAM)?**
+
+- A. it is required by the grading rubric only
+- B. foundation models cannot do zero-shot
+- C. it guarantees your model will win
+- D. it is often a very strong baseline; if your fine-tuned model can't beat it, that is the honest result
+
+<details>
+<summary>Answer</summary>
+
+**D. it is often a very strong baseline; if your fine-tuned model can't beat it, that is the honest result** — In 2020s vision, zero-shot foundation models are frequently formidable baselines; beating one — or conceding it suffices — is a real, defensible finding.
+
+</details>
+
+**14. A capstone whose model classifies faces must, in its model card, address:**
+
+- A. only the accuracy
+- B. biometric-law constraints (e.g., GDPR Art. 9, BIPA consent) and intended vs. out-of-scope uses
+- C. the learning rate schedule
+- D. the GPU temperature
+
+<details>
+<summary>Answer</summary>
+
+**B. biometric-law constraints (e.g., GDPR Art. 9, BIPA consent) and intended vs. out-of-scope uses** — Faces are biometric identifiers; consent and provenance are legal requirements, and the card must scope out prohibited uses (cf. EU AI Act).
+
+</details>
+
+**15. Recht et al. (2019) rebuilt ImageNet's test set by the original protocol and found accuracy dropped 11–14 points. The lesson for your capstone is:**
+
+- A. test sets never matter
+- B. distribution shift does not affect deep models
+- C. clean test accuracy is a lower bound on field performance
+- D. clean test accuracy is an upper bound; field performance under shift is usually worse
+
+<details>
+<summary>Answer</summary>
+
+**D. clean test accuracy is an upper bound; field performance under shift is usually worse** — Models overfit specific benchmarks; a new same-distribution test set already drops accuracy, so your clean number over-states real-world performance.
+
+</details>
 
 ---
-
-## Answer key
-
-1. **C. Scoping too big/vague to finish or evaluate** — Scope for finished and evaluable, not maximal.
-2. **A. The simplest task that solves your problem (classification over detection over segmentation)** — Annotation cost and difficulty rise sharply; use the simplest sufficient task.
-3. **C. A metric and a baseline to beat** — Without a metric and baseline, success can't be judged.
-4. **D. Held-out images the model never saw and you didn't tune on** — A peeked-at test set is just more training data.
-5. **B. By group — near-duplicates, same-subject photos, and same-video frames stay in one split** — Correlated images across splits leak; group-splitting prevents it.
-6. **D. See the mistakes — a gallery of misclassified images reveals patterns** — Visual error analysis exposes data, labeling, and real-limitation problems.
-7. **B. Overall accuracy can hide poor performance on underrepresented groups — an ethical must** — Vision datasets are biased; a high overall number can mask harm to a subgroup.
-8. **A. Preprocessing parity between training and the served pipeline** — Mismatched resize/normalize/channel-order silently collapses production accuracy.
-9. **A. Intended use, data provenance, per-subgroup metrics, failure modes, and privacy/consent/bias notes** — It's how responsible ML is documented; vision's privacy weight makes it essential.
-10. **C. Explaining them honestly — failures, bias, and next steps** — Honest limitations read as competence; overclaiming reads as the opposite.

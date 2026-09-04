@@ -1,88 +1,229 @@
 # Week 6 — Quiz
 
-Ten questions. Answer key below.
+Fifteen questions spanning box geometry and the IoU/GIoU family, greedy vs. Soft-NMS, the detector design map, label assignment and focal loss, the exact mAP protocol, and DETR set prediction. Attempt each before the answer key — several test the distinctions (metric vs. loss, mAP@0.5 vs. [.5:.95], one-to-many vs. one-to-one) that separate a working understanding from a vocabulary.
 
-**1. Object detection outputs, per object:**
+**1. Object detection outputs, per object instance:**
 
-- A. A bounding box, a class label, and a confidence score
-- B. Only a pixel mask
-- C. A single number for the whole image
-- D. Only a class label
+- A. only a pixel-level segmentation mask
+- B. a single class label for the whole image
+- C. the image's dominant color
+- D. a bounding box, a class label, and a confidence score
+
+<details>
+<summary>Answer</summary>
+
+**D. a bounding box, a class label, and a confidence score** — Detection localizes (box) and classifies (label + score) each instance; a variable-length set of these is the output.
+
+</details>
 
 **2. Intersection over Union (IoU) is defined as:**
 
-- A. Overlap area minus union area
-- B. Overlap area divided by union area
-- C. Union divided by overlap
-- D. The larger box's area
+- A. overlap area minus union area
+- B. overlap area divided by union area
+- C. union area divided by overlap area
+- D. the larger box's area divided by the smaller's
 
-**3. Non-maximum suppression removes:**
+<details>
+<summary>Answer</summary>
 
-- A. Low-resolution images
-- B. Background pixels
-- C. The final layer
-- D. Duplicate overlapping boxes for the same object, keeping the highest-scoring
+**B. overlap area divided by union area** — IoU = intersection ÷ union, ranging 0 (disjoint) to 1 (identical), scale-invariant and symmetric.
 
-**4. A two-stage detector (e.g. Faster R-CNN):**
+</details>
 
-- A. Predicts boxes in one pass
-- B. Proposes regions, then classifies and refines them — accurate but slower
-- C. Uses no convolutions
-- D. Only classifies whole images
+**3. The `max(0, ...)` clamp in an IoU implementation exists to:**
 
-**5. One-stage detectors (e.g. YOLO) are favored for:**
+- A. speed up the computation
+- B. normalize coordinates to [0,1]
+- C. convert corner form to center form
+- D. prevent two negative side lengths from multiplying into a spurious positive intersection for disjoint boxes
 
-- A. Not needing any training
-- B. Grayscale images only
-- C. Maximum accuracy on tiny objects
-- D. Real-time / edge use because they are fast (single pass)
+<details>
+<summary>Answer</summary>
 
-**6. Anchor-free detectors differ by:**
+**D. prevent two negative side lengths from multiplying into a spurious positive intersection for disjoint boxes** — Without clamping, disjoint boxes give negative iw and ih whose product is positive — a classic false-overlap bug.
 
-- A. Predicting boxes directly (e.g. from centers) instead of refining preset anchor boxes
-- B. Only detecting one class
-- C. Requiring anchors of every size
-- D. Using no neural network
+</details>
 
-**7. The background/foreground imbalance in detection is often handled by:**
+**4. Plain IoU is a poor *regression loss* (as opposed to a good metric) because:**
 
-- A. Focal loss (down-weighting easy background examples)
-- B. Ignoring it
-- C. Using MSE loss
-- D. Removing all background
+- A. it is too slow to compute
+- B. for two disjoint boxes it is 0 for every configuration, so its gradient is zero and cannot pull boxes together
+- C. it only works on square boxes
+- D. it requires the softmax function
 
-**8. Average Precision (AP) for a class is:**
+<details>
+<summary>Answer</summary>
 
-- A. The area under that class's precision–recall curve
-- B. The number of boxes
-- C. The IoU threshold
-- D. The single best prediction's score
+**B. for two disjoint boxes it is 0 for every configuration, so its gradient is zero and cannot pull boxes together** — IoU's zero-gradient dead zone for non-overlapping boxes is exactly what GIoU/DIoU/CIoU were designed to fix.
 
-**9. mAP@[.5:.95] (COCO) differs from mAP@0.5 by:**
+</details>
 
-- A. Ignoring classification
-- B. Using no IoU
-- C. Averaging AP over IoU thresholds 0.5–0.95, rewarding tighter localization
-- D. Being always higher
+**5. Greedy non-maximum suppression:**
 
-**10. A detector with high mAP@0.5 but low mAP@0.75 is:**
+- A. keeps the highest-scoring box and deletes remaining boxes whose IoU with it exceeds a threshold, per class
+- B. averages all overlapping boxes into one
+- C. removes low-resolution images from the batch
+- D. deletes background pixels before classification
 
-- A. Perfectly localized
-- B. Not detecting anything
-- C. Overfit to background
-- D. Finding objects but localizing loosely
+<details>
+<summary>Answer</summary>
+
+**A. keeps the highest-scoring box and deletes remaining boxes whose IoU with it exceeds a threshold, per class** — Greedy NMS sorts by score, keeps the top box, and suppresses its high-IoU duplicates, repeating per class.
+
+</details>
+
+**6. Soft-NMS differs from greedy NMS by:**
+
+- A. decaying an overlapping box's score (e.g. by exp(-IoU²/σ)) instead of deleting it outright, improving recall in crowds
+- B. using no IoU at all
+- C. requiring a two-stage detector
+- D. running before the network instead of after
+
+<details>
+<summary>Answer</summary>
+
+**A. decaying an overlapping box's score (e.g. by exp(-IoU²/σ)) instead of deleting it outright, improving recall in crowds** — Soft-NMS replaces hard deletion with score decay, so a heavily overlapping second real object can still survive at lower rank.
+
+</details>
+
+**7. A two-stage detector (e.g. Faster R-CNN):**
+
+- A. uses a Region Proposal Network to suggest regions, then classifies and refines each — accurate but slower
+- B. predicts all boxes in a single dense pass
+- C. only classifies whole images without localization
+- D. uses no convolutions
+
+<details>
+<summary>Answer</summary>
+
+**A. uses a Region Proposal Network to suggest regions, then classifies and refines each — accurate but slower** — An RPN proposes ~1000 regions, then a second head classifies and box-refines them: typically more accurate, slower.
+
+</details>
+
+**8. One-stage detectors (e.g. YOLO, RetinaNet) are favored for real-time/edge use because:**
+
+- A. they only work on grayscale images
+- B. a single dense forward pass makes them fast enough for live video
+- C. they are always the most accurate on tiny objects
+- D. they need no training data
+
+<details>
+<summary>Answer</summary>
+
+**B. a single dense forward pass makes them fast enough for live video** — One pass over a dense grid gives real-time throughput, which is why YOLO dominates video and edge deployment.
+
+</details>
+
+**9. Anchor-free detectors (e.g. FCOS) differ from anchor-based ones by:**
+
+- A. using no neural network
+- B. predicting boxes directly (e.g. distances from a center location) instead of refining preset reference boxes
+- C. detecting only a single class
+- D. requiring one anchor of every possible size
+
+<details>
+<summary>Answer</summary>
+
+**B. predicting boxes directly (e.g. distances from a center location) instead of refining preset reference boxes** — Anchor-free methods drop predefined anchors and their tuning, predicting boxes directly from locations/centers.
+
+</details>
+
+**10. In detection training, 'label assignment' refers to:**
+
+- A. choosing the dataset's class names
+- B. assigning a learning rate to each layer
+- C. labeling the test set
+- D. deciding which predictions/anchors are positives (responsible for which ground-truth object) and which are background
+
+<details>
+<summary>Answer</summary>
+
+**D. deciding which predictions/anchors are positives (responsible for which ground-truth object) and which are background** — Assignment maps each candidate prediction to a GT (positive) or background (negative), defining what the loss means.
+
+</details>
+
+**11. The extreme foreground/background imbalance in dense one-stage detectors is best described as:**
+
+- A. roughly balanced, ~1:1
+- B. background outnumbering foreground by roughly 1000:1, so easy negatives dominate an ordinary cross-entropy gradient
+- C. foreground outnumbering background
+- D. irrelevant to training
+
+<details>
+<summary>Answer</summary>
+
+**B. background outnumbering foreground by roughly 1000:1, so easy negatives dominate an ordinary cross-entropy gradient** — ~100k anchors vs. tens of foreground gives ~1000:1; summed easy-negative loss swamps foreground under plain CE.
+
+</details>
+
+**12. Focal loss FL(p_t) = -(1-p_t)^γ log(p_t) reduces the imbalance problem by:**
+
+- A. removing all background examples from the batch
+- B. switching classification to mean squared error
+- C. increasing the learning rate on background
+- D. down-weighting well-classified (easy) examples via the (1-p_t)^γ factor while leaving hard examples near full weight
+
+<details>
+<summary>Answer</summary>
+
+**D. down-weighting well-classified (easy) examples via the (1-p_t)^γ factor while leaving hard examples near full weight** — As p_t→1 the modulating factor →0, silencing easy negatives; hard examples (small p_t) keep their gradient — no sampling needed.
+
+</details>
+
+**13. At γ = 2, an easy example with p_t = 0.9 has its loss scaled by approximately:**
+
+- A. 1 (unchanged)
+- B. 0.01 — a roughly 100× reduction
+- C. 10 (amplified)
+- D. 0 exactly
+
+<details>
+<summary>Answer</summary>
+
+**B. 0.01 — a roughly 100× reduction** — (1 - 0.9)^2 = 0.1^2 = 0.01, a ~100× down-weighting of the easy example relative to plain cross-entropy.
+
+</details>
+
+**14. In computing AP, each ground-truth box may be matched to:**
+
+- A. exactly the two highest-scoring predictions
+- B. no predictions ever
+- C. any number of predictions
+- D. at most one prediction; a second prediction on the same object is a duplicate false positive
+
+<details>
+<summary>Answer</summary>
+
+**D. at most one prediction; a second prediction on the same object is a duplicate false positive** — One-GT-per-prediction matching is how the metric penalizes missing NMS: duplicates become false positives.
+
+</details>
+
+**15. COCO's primary metric mAP@[.5:.95] differs from mAP@0.5 by:**
+
+- A. using no IoU threshold
+- B. averaging AP over ten IoU thresholds from 0.50 to 0.95, rewarding tighter localization
+- C. always producing a higher number than mAP@0.5
+- D. ignoring the class labels entirely
+
+<details>
+<summary>Answer</summary>
+
+**B. averaging AP over ten IoU thresholds from 0.50 to 0.95, rewarding tighter localization** — Averaging over stricter IoU thresholds demands precise boxes, so mAP@[.5:.95] ≤ mAP@0.5 and the two are not comparable.
+
+</details>
+
+**16. DETR removes both anchors and NMS because its bipartite Hungarian matching is:**
+
+- A. one-to-one, so each ground truth is matched to exactly one prediction and duplicates are trained toward 'no object'
+- B. one-to-many, rewarding redundant predictions
+- C. applied only at inference, not training
+- D. based on hand-tuned anchor scales
+
+<details>
+<summary>Answer</summary>
+
+**A. one-to-one, so each ground truth is matched to exactly one prediction and duplicates are trained toward 'no object'** — One-to-one assignment penalizes duplicates during training, so the network learns not to emit them — NMS becomes unnecessary.
+
+</details>
 
 ---
-
-## Answer key
-
-1. **A. A bounding box, a class label, and a confidence score** — Detection localizes (box) and classifies (label + score) each object.
-2. **B. Overlap area divided by union area** — IoU = intersection ÷ union, ranging 0 (no overlap) to 1 (identical).
-3. **D. Duplicate overlapping boxes for the same object, keeping the highest-scoring** — Greedy NMS keeps top-score boxes and deletes their high-IoU duplicates, per class.
-4. **B. Proposes regions, then classifies and refines them — accurate but slower** — Region proposals then per-region classification: typically more accurate, slower.
-5. **D. Real-time / edge use because they are fast (single pass)** — A single dense forward pass makes them fast enough for live video and edge devices.
-6. **A. Predicting boxes directly (e.g. from centers) instead of refining preset anchor boxes** — They drop predefined anchors and their tuning, predicting boxes directly.
-7. **A. Focal loss (down-weighting easy background examples)** — Focal loss reduced one-stage detectors' overwhelming easy-negative dominance.
-8. **A. The area under that class's precision–recall curve** — AP summarizes the precision/recall trade-off as the PR-curve area.
-9. **C. Averaging AP over IoU thresholds 0.5–0.95, rewarding tighter localization** — COCO mAP averages across stricter IoU thresholds, so it demands precise boxes.
-10. **D. Finding objects but localizing loosely** — It matches at a loose IoU but boxes aren't tight enough for the stricter threshold.

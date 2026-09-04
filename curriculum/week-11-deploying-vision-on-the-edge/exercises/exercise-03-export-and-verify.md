@@ -1,14 +1,23 @@
-# Exercise 3 — Export to ONNX and verify parity
+# Exercise 3 — Export to ONNX, verify output parity, and break preprocessing on purpose
 
-**Goal:** get a model out of PyTorch and prove it still works.
+**Goal:** get a model out of PyTorch, prove it still works, and make the #1 deployment bug unforgettable.
 
 ## Tasks
 
-1. Export a trained model to ONNX with `torch.onnx.export`, naming inputs/outputs.
-2. Load it in ONNX Runtime and run inference on the same test images.
-3. **Verify parity:** confirm the ONNX outputs match the PyTorch outputs to a small numerical tolerance. Investigate any mismatch (unsupported op, shape issue).
-4. Explicitly reconstruct the preprocessing in the ONNX pipeline and confirm it matches training preprocessing exactly — then show what happens to accuracy if you deliberately mismatch it (wrong normalization or channel order).
+1. Export a trained model to ONNX with `torch.onnx.export` (name inputs/outputs, set an opset). Load it in
+   ONNX Runtime and run inference on the same fixed test batch.
+2. **Verify output parity:** assert the ONNX logits match the PyTorch logits to a tolerance
+   (`np.allclose(..., atol=1e-4)`). If they do not, diagnose it — unsupported op, NCHW/NHWC layout, or a
+   trace-vs-script control-flow issue — and fix it.
+3. **Reconstruct preprocessing** in the deployment pipeline (resize interpolation, center-crop, channel order,
+   per-channel mean/std, [0,1] scaling) and confirm it matches training preprocessing exactly on held-out
+   accuracy.
+4. **Deliberate mismatch:** now break preprocessing three ways — swap RGB->BGR, drop the normalization, and
+   change the resize interpolation — re-running held-out accuracy after each. Record how far accuracy falls
+   while the export "passes" every structural check.
 
 ## Deliverable
 
-A notebook that exports to ONNX, confirms output parity with PyTorch, and demonstrates the preprocessing-mismatch failure. The deliberate-mismatch demo makes the #1 deployment bug unforgettable.
+A notebook that exports to ONNX, confirms output parity with PyTorch, matches preprocessing to reach baseline
+accuracy, and then demonstrates the accuracy collapse from each deliberate preprocessing mismatch — with a
+short reflection on why offline tests miss this class of bug.
